@@ -1,0 +1,64 @@
+name: Build TubeVault APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Unpack project if a .zip was uploaded
+        run: |
+          shopt -s nullglob
+          if [ ! -f settings.gradle.kts ]; then
+            for z in *.zip; do
+              echo "Unzipping $z"
+              unzip -oq "$z" -d _project
+            done
+          fi
+          ROOT=$(find . -name settings.gradle.kts -not -path "*/node_modules/*" | head -n 1 | xargs -r dirname)
+          if [ -z "$ROOT" ]; then
+            echo "settings.gradle.kts not found - upload the TubeVault project (or its zip) to the repo root"
+            exit 1
+          fi
+          echo "Project root: $ROOT"
+          echo "PROJECT_DIR=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Make sure a debug keystore exists
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android \
+              -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Build release APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleRelease --no-daemon --stacktrace
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp app/build/outputs/apk/release/*.apk "$GITHUB_WORKSPACE/out/TubeVault.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TubeVault-APK
+          path: out/TubeVault.apk
+          if-no-files-found: error
