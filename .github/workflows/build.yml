@@ -7,7 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,14 +40,13 @@ jobs:
           echo "Project root: $ROOT"
           echo "PROJECT_DIR=$ROOT" >> "$GITHUB_ENV"
 
-      - name: Make sure a debug keystore exists
+      - name: Fetch whisper.cpp (on-device speech-to-text for Karaoke mode)
         run: |
-          mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android \
-              -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          cd "$PROJECT_DIR/app/src/main/cpp"
+          rm -rf whisper.cpp
+          git clone --depth 1 --branch v1.9.6 https://github.com/ggml-org/whisper.cpp.git whisper.cpp
+          rm -rf whisper.cpp/.git
+          echo "TV_NDK_VERSION=$(basename "${ANDROID_NDK_LATEST_HOME:-}")" >> "$GITHUB_ENV"
 
       - name: Build release APK
         run: |
