@@ -105,6 +105,23 @@ jobs:
             --title "TubeVault ${VN} (build ${GITHUB_RUN_NUMBER})" \
             --notes-file out/notes.md \
             --latest
-          # keep only the 5 newest releases
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[5:] | .[].tagName' \
+          # keep only the 5 newest app releases (never touch the "models" release)
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '[.[] | select(.tagName != "models")] | .[5:] | .[].tagName' \
             | xargs -r -I{} gh release delete {} --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+
+      # ---- one-time copy of the AI voice model into YOUR repo, so the app never depends on someone else's link ----
+      - name: Mirror AI voice model (once)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view models --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "AI model release already exists"
+          else
+            curl -fL --retry 3 -o vocal-model.onnx "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_3.onnx"
+            echo "317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc  vocal-model.onnx" | sha256sum -c -
+            gh release create models vocal-model.onnx \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "AI models (used by the app)" \
+              --notes "UVR-MDX-NET-Inst_HQ_3 voice separation model from the Ultimate Vocal Remover project (MIT licence). Downloaded once by the app." \
+              --prerelease --latest=false
+          fi
